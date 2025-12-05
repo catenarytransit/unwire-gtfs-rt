@@ -1,9 +1,25 @@
 [package]
-name = "unwire-gtfs-rt"
+name = "dart_fetcher"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-tokio = { version = "1.48.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rsa = { version = "0.7", features = ["pem"] }
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.13"
+rand = "0.8"
+tokio = { version = "1", features = ["full"] }
+hex = "0.4"
+md-5 = "0.10"
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.10"
+prost = "0.12"
+prost-types = "0.12"
+serde_urlencoded = "0.7"
+urlencoding = "2.1"
+chrono = "0.4"
