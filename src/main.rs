@@ -1,10 +1,13 @@
-use dart_fetcher::{fetch_dart_vehicles, fetch_all_dart_trip_updates};
+use dart_fetcher::{FeedId, fetch_all_feed_trip_updates, fetch_feed_vehicles};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
 
+    let feed = FeedId::Dart;
+
     println!("--- Fetching Vehicles ---");
-    match fetch_dart_vehicles() {
+    match fetch_feed_vehicles(feed).await {
         Ok(feed) => {
             println!("Successfully fetched {} vehicles", feed.entity.len());
             for entity in feed.entity.iter().take(5) {
@@ -15,7 +18,7 @@ fn main() {
     }
 
     println!("\n--- Fetching All Trip Updates ---");
-    match fetch_all_dart_trip_updates() {
+    match fetch_all_feed_trip_updates(feed).await {
         Ok(feed) => {
             println!("Successfully fetched {} trip updates", feed.entity.len());
             for entity in feed.entity.iter().take(5) {

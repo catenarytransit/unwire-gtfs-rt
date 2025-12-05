@@ -1,7 +1,8 @@
-use crate::model::{VehicleContent, TripUpdateResponse};
+use crate::model::{TripUpdateResponse, VehicleContent};
+use crate::strip_prefix;
+use chrono::DateTime;
 use prost::Message;
 use std::time::{SystemTime, UNIX_EPOCH};
-use chrono::{DateTime, FixedOffset};
 
 // Manual definitions of GTFS Realtime structs using prost macros
 
@@ -134,16 +135,6 @@ pub struct Position {
     pub speed: Option<f32>,
 }
 
-fn strip_prefix(id: &str) -> String {
-    if let Some(stripped) = id.strip_prefix("DART:") {
-        stripped.to_string()
-    } else if let Some(stripped) = id.strip_prefix("DART-") {
-        stripped.to_string()
-    } else {
-        id.to_string()
-    }
-}
-
 pub fn convert_to_gtfs(vehicles: Vec<VehicleContent>) -> FeedMessage {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -217,34 +208,38 @@ fn parse_time(t: &Option<String>) -> Option<i64> {
 }
 
 pub fn convert_trip_update(trip_id: String, update: TripUpdateResponse) -> TripUpdate {
-    let stop_time_updates = update.entries.into_iter().map(|entry| {
-        let arrival = if let Some(arr) = entry.arrival {
-            Some(StopTimeEvent {
-                delay: None,
-                time: parse_time(&arr.real).or_else(|| parse_time(&arr.scheduled)),
-                uncertainty: None,
-            })
-        } else {
-            None
-        };
+    let stop_time_updates = update
+        .entries
+        .into_iter()
+        .map(|entry| {
+            let arrival = if let Some(arr) = entry.arrival {
+                Some(StopTimeEvent {
+                    delay: None,
+                    time: parse_time(&arr.real).or_else(|| parse_time(&arr.scheduled)),
+                    uncertainty: None,
+                })
+            } else {
+                None
+            };
 
-        let departure = if let Some(dep) = entry.departure {
-            Some(StopTimeEvent {
-                delay: None,
-                time: parse_time(&dep.real).or_else(|| parse_time(&dep.scheduled)),
-                uncertainty: None,
-            })
-        } else {
-            None
-        };
+            let departure = if let Some(dep) = entry.departure {
+                Some(StopTimeEvent {
+                    delay: None,
+                    time: parse_time(&dep.real).or_else(|| parse_time(&dep.scheduled)),
+                    uncertainty: None,
+                })
+            } else {
+                None
+            };
 
-        StopTimeUpdate {
-            stop_sequence: Some(entry.stop.index),
-            stop_id: Some(strip_prefix(&entry.stop.id)),
-            arrival,
-            departure,
-        }
-    }).collect();
+            StopTimeUpdate {
+                stop_sequence: Some(entry.stop.index),
+                stop_id: Some(strip_prefix(&entry.stop.id)),
+                arrival,
+                departure,
+            }
+        })
+        .collect();
 
     TripUpdate {
         trip: TripDescriptor {

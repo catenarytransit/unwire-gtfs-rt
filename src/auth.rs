@@ -1,17 +1,13 @@
 use anyhow::{Context, Result};
 use hmac::{Hmac, Mac};
 use rand::rngs::OsRng;
-use reqwest::blocking::Client;
-use rsa::{
-    pkcs1::{EncodeRsaPrivateKey, EncodeRsaPublicKey},
-    pkcs8::{DecodePrivateKey, EncodePublicKey},
-    PaddingScheme, RsaPrivateKey, RsaPublicKey,
-};
+use reqwest::Client;
+use rsa::{PaddingScheme, RsaPrivateKey, RsaPublicKey, pkcs8::EncodePublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEVELOPER_KEY: &str = "057e903f-48b3-4461-b9fc-39d14ca829ce";
 const DEVELOPER_SECRET: &str = "35a425ad968fbe5e4ec8364e8e500420";
@@ -45,6 +41,7 @@ struct AppInstanceResponse {
     instance_id: String,
 }
 
+#[derive(Clone)]
 pub struct Authenticator {
     client: Client,
     private_key: RsaPrivateKey,
@@ -53,7 +50,11 @@ pub struct Authenticator {
 }
 
 fn log_debug(msg: &str) {
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open("debug.log") {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("debug.log")
+    {
         let _ = writeln!(file, "{}", msg);
     }
 }
@@ -72,12 +73,12 @@ impl Authenticator {
         })
     }
 
-    pub fn register(&mut self) -> Result<()> {
+    pub async fn register(&mut self) -> Result<()> {
         let public_key = RsaPublicKey::from(&self.private_key);
         let public_key_der = public_key
             .to_public_key_der()
             .context("failed to convert to der")?;
-        
+
         let public_key_b64 = base64::encode(&public_key_der);
 
         let req_body = AppInstanceRequest {
@@ -102,28 +103,30 @@ impl Authenticator {
             .header("Content-Type", "application/json")
             .json(&req_body)
             .send()
+            .await
             .context("failed to send registration request")?;
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let text = resp.text().unwrap_or_default();
+            let text = resp.text().await.unwrap_or_default();
             anyhow::bail!("Registration failed: {} - {}", status, text);
         }
 
-        let resp_json: AppInstanceResponseWrapper = resp.json().context("failed to parse response")?;
+        let resp_json: AppInstanceResponseWrapper =
+            resp.json().await.context("failed to parse response")?;
         let app_instance = resp_json.app_instance;
 
         let encrypted_bytes = base64::decode(&app_instance.encrypted_secret)
             .context("failed to decode encrypted secret")?;
-        
+
         let padding = PaddingScheme::new_pkcs1v15_encrypt();
         let decrypted_bytes = self
             .private_key
             .decrypt(padding, &encrypted_bytes)
             .context("failed to decrypt secret")?;
-        
-        let decrypted_secret = String::from_utf8(decrypted_bytes)
-            .context("decrypted secret is not valid utf8")?;
+
+        let decrypted_secret =
+            String::from_utf8(decrypted_bytes).context("decrypted secret is not valid utf8")?;
 
         log_debug(&format!("Decrypted secret: {}", decrypted_secret));
         log_debug(&format!("Instance ID: {}", app_instance.instance_id));
@@ -141,10 +144,7 @@ impl Authenticator {
         body: Option<&str>,
         query: Option<&str>,
     ) -> Result<Vec<(String, String)>> {
-        let decrypted_secret = self
-            .decrypted_secret
-            .as_ref()
-            .context("not registered")?;
+        let decrypted_secret = self.decrypted_secret.as_ref().context("not registered")?;
         let instance_id = self.instance_id.as_ref().context("not registered")?;
 
         let content_sha256 = if let Some(b) = body {
@@ -159,8 +159,15 @@ impl Authenticator {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let jti = format!("{}-{}", now, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_millis());
-        
+        let jti = format!(
+            "{}-{}",
+            now,
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .subsec_millis()
+        );
+
         #[derive(Serialize)]
         struct JwtClaim {
             iat: u64,
@@ -198,7 +205,7 @@ impl Authenticator {
             .expect("HMAC can take key of any size");
         mac.update(sig_input.as_bytes());
         let signature = base64::encode(mac.finalize().into_bytes());
-        
+
         let ssg_instance_hmac = format!("{}:{}", instance_id, signature);
 
         Ok(vec![
