@@ -1,4 +1,4 @@
-use dart_fetcher::{FeedId, fetch_all_feed_trip_updates, fetch_feed_vehicles};
+use unwire_gtfs_rt::{FeedId, fetch_all_feed_trip_updates, fetch_feed_vehicles};
 
 #[tokio::main]
 async fn main() {
