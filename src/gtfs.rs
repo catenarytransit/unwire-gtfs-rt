@@ -1,139 +1,21 @@
 use crate::model::{TripUpdateResponse, VehicleContent};
 use crate::strip_prefix;
 use chrono::DateTime;
-use prost::Message;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Manual definitions of GTFS Realtime structs using prost macros
-
-#[derive(Clone, PartialEq, Message)]
-pub struct FeedMessage {
-    #[prost(message, required, tag = "1")]
-    pub header: FeedHeader,
-    #[prost(message, repeated, tag = "2")]
-    pub entity: Vec<FeedEntity>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct FeedHeader {
-    #[prost(string, required, tag = "1")]
-    pub gtfs_realtime_version: String,
-    #[prost(enumeration = "Incrementality", optional, tag = "2")]
-    pub incrementality: Option<i32>,
-    #[prost(uint64, optional, tag = "3")]
-    pub timestamp: Option<u64>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, prost::Enumeration)]
-#[repr(i32)]
-pub enum Incrementality {
-    FullDataset = 0,
-    Differential = 1,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct FeedEntity {
-    #[prost(string, required, tag = "1")]
-    pub id: String,
-    #[prost(bool, optional, tag = "2")]
-    pub is_deleted: Option<bool>,
-    #[prost(message, optional, tag = "3")]
-    pub trip_update: Option<TripUpdate>,
-    #[prost(message, optional, tag = "4")]
-    pub vehicle: Option<VehiclePosition>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct TripUpdate {
-    #[prost(message, required, tag = "1")]
-    pub trip: TripDescriptor,
-    #[prost(message, optional, tag = "2")]
-    pub vehicle: Option<VehicleDescriptor>,
-    #[prost(message, repeated, tag = "3")]
-    pub stop_time_update: Vec<StopTimeUpdate>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct StopTimeUpdate {
-    #[prost(uint32, optional, tag = "1")]
-    pub stop_sequence: Option<u32>,
-    #[prost(string, optional, tag = "4")]
-    pub stop_id: Option<String>,
-    #[prost(message, optional, tag = "2")]
-    pub arrival: Option<StopTimeEvent>,
-    #[prost(message, optional, tag = "3")]
-    pub departure: Option<StopTimeEvent>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct StopTimeEvent {
-    #[prost(int32, optional, tag = "1")]
-    pub delay: Option<i32>,
-    #[prost(int64, optional, tag = "2")]
-    pub time: Option<i64>,
-    #[prost(int32, optional, tag = "3")]
-    pub uncertainty: Option<i32>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct VehiclePosition {
-    #[prost(message, optional, tag = "1")]
-    pub trip: Option<TripDescriptor>,
-    #[prost(message, optional, tag = "8")]
-    pub vehicle: Option<VehicleDescriptor>,
-    #[prost(message, optional, tag = "2")]
-    pub position: Option<Position>,
-    #[prost(uint32, optional, tag = "3")]
-    pub current_stop_sequence: Option<u32>,
-    #[prost(string, optional, tag = "4")]
-    pub stop_id: Option<String>,
-    #[prost(enumeration = "VehicleStopStatus", optional, tag = "5")]
-    pub current_status: Option<i32>,
-    #[prost(uint64, optional, tag = "6")]
-    pub timestamp: Option<u64>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, prost::Enumeration)]
-#[repr(i32)]
-pub enum VehicleStopStatus {
-    IncomingAt = 0,
-    StoppedAt = 1,
-    InTransitTo = 2,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct TripDescriptor {
-    #[prost(string, optional, tag = "1")]
-    pub trip_id: Option<String>,
-    #[prost(string, optional, tag = "5")]
-    pub route_id: Option<String>,
-    #[prost(uint32, optional, tag = "6")]
-    pub direction_id: Option<u32>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct VehicleDescriptor {
-    #[prost(string, optional, tag = "1")]
-    pub id: Option<String>,
-    #[prost(string, optional, tag = "2")]
-    pub label: Option<String>,
-    #[prost(string, optional, tag = "3")]
-    pub license_plate: Option<String>,
-}
-
-#[derive(Clone, PartialEq, Message)]
-pub struct Position {
-    #[prost(float, required, tag = "1")]
-    pub latitude: f32,
-    #[prost(float, required, tag = "2")]
-    pub longitude: f32,
-    #[prost(float, optional, tag = "3")]
-    pub bearing: Option<f32>,
-    #[prost(double, optional, tag = "4")]
-    pub odometer: Option<f64>,
-    #[prost(float, optional, tag = "5")]
-    pub speed: Option<f32>,
-}
+pub use gtfs_realtime::{
+    feed_header::Incrementality,
+    trip_update::{StopTimeEvent, StopTimeUpdate},
+    vehicle_position::VehicleStopStatus,
+    FeedEntity,
+    FeedHeader,
+    FeedMessage,
+    Position,
+    TripDescriptor,
+    TripUpdate,
+    VehicleDescriptor,
+    VehiclePosition,
+};
 
 pub fn convert_to_gtfs(vehicles: Vec<VehicleContent>) -> FeedMessage {
     let timestamp = SystemTime::now()
@@ -149,6 +31,10 @@ pub fn convert_to_gtfs(vehicles: Vec<VehicleContent>) -> FeedMessage {
                     trip_id: Some(strip_prefix(&trip.id)),
                     route_id: v.route.map(|r| strip_prefix(&r.id)),
                     direction_id: v.direction_id.map(|d| d as u32),
+                    start_time: None,
+                    start_date: None,
+                    schedule_relationship: None,
+                    modified_trip: None,
                 })
             } else {
                 None
@@ -167,6 +53,7 @@ pub fn convert_to_gtfs(vehicles: Vec<VehicleContent>) -> FeedMessage {
                 id: Some(vehicle_id.clone()),
                 label: v.head_sign,
                 license_plate: None,
+                wheelchair_accessible: None,
             };
 
             let vehicle_pos = VehiclePosition {
@@ -177,6 +64,10 @@ pub fn convert_to_gtfs(vehicles: Vec<VehicleContent>) -> FeedMessage {
                 stop_id: v.stop.map(|s| strip_prefix(&s.id)),
                 current_status: None,
                 timestamp: None,
+                congestion_level: None,
+                occupancy_status: None,
+                occupancy_percentage: None,
+                multi_carriage_details: Vec::new(),
             };
 
             FeedEntity {
@@ -184,6 +75,10 @@ pub fn convert_to_gtfs(vehicles: Vec<VehicleContent>) -> FeedMessage {
                 is_deleted: Some(false),
                 trip_update: None,
                 vehicle: Some(vehicle_pos),
+                alert: None,
+                shape: None,
+                stop: None,
+                trip_modifications: None,
             }
         })
         .collect();
@@ -193,6 +88,7 @@ pub fn convert_to_gtfs(vehicles: Vec<VehicleContent>) -> FeedMessage {
             gtfs_realtime_version: "2.0".to_string(),
             incrementality: Some(Incrementality::FullDataset as i32),
             timestamp: Some(timestamp),
+            feed_version: None,
         },
         entity: entities,
     }
@@ -217,6 +113,7 @@ pub fn convert_trip_update(trip_id: String, update: TripUpdateResponse) -> TripU
                     delay: None,
                     time: parse_time(&arr.real).or_else(|| parse_time(&arr.scheduled)),
                     uncertainty: None,
+                    scheduled_time: None,
                 })
             } else {
                 None
@@ -227,6 +124,7 @@ pub fn convert_trip_update(trip_id: String, update: TripUpdateResponse) -> TripU
                     delay: None,
                     time: parse_time(&dep.real).or_else(|| parse_time(&dep.scheduled)),
                     uncertainty: None,
+                    scheduled_time: None,
                 })
             } else {
                 None
@@ -237,6 +135,9 @@ pub fn convert_trip_update(trip_id: String, update: TripUpdateResponse) -> TripU
                 stop_id: Some(strip_prefix(&entry.stop.id)),
                 arrival,
                 departure,
+                departure_occupancy_status: None,
+                schedule_relationship: None,
+                stop_time_properties: None,
             }
         })
         .collect();
@@ -246,8 +147,15 @@ pub fn convert_trip_update(trip_id: String, update: TripUpdateResponse) -> TripU
             trip_id: Some(strip_prefix(&trip_id)),
             route_id: None, // Not available in TripUpdateResponse
             direction_id: None,
+            start_time: None,
+            start_date: None,
+            schedule_relationship: None,
+            modified_trip: None,
         },
         vehicle: None,
         stop_time_update: stop_time_updates,
+        timestamp: None,
+        delay: None,
+        trip_properties: None,
     }
 }

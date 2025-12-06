@@ -98,6 +98,10 @@ pub async fn fetch_feed_trip_update(feed: FeedId, trip_id: &str) -> Result<FeedM
         is_deleted: Some(false),
         trip_update: Some(trip_update),
         vehicle: None,
+        alert: None,
+        shape: None,
+        stop: None,
+        trip_modifications: None,
     };
 
     Ok(FeedMessage {
@@ -105,6 +109,7 @@ pub async fn fetch_feed_trip_update(feed: FeedId, trip_id: &str) -> Result<FeedM
             gtfs_realtime_version: "2.0".to_string(),
             incrementality: Some(Incrementality::FullDataset as i32),
             timestamp: Some(timestamp),
+            feed_version: None,
         },
         entity: vec![entity],
     })
@@ -151,6 +156,10 @@ pub async fn fetch_all_feed_trip_updates(feed: FeedId) -> Result<FeedMessage> {
                         is_deleted: Some(false),
                         trip_update: Some(trip_update),
                         vehicle: None,
+                        alert: None,
+                        shape: None,
+                        stop: None,
+                        trip_modifications: None,
                     };
                     Some(entity)
                 }
@@ -180,6 +189,7 @@ pub async fn fetch_all_feed_trip_updates(feed: FeedId) -> Result<FeedMessage> {
             gtfs_realtime_version: "2.0".to_string(),
             incrementality: Some(Incrementality::FullDataset as i32),
             timestamp: Some(timestamp),
+            feed_version: None,
         },
         entity: entities,
     })
